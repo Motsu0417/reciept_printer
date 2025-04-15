@@ -14,7 +14,7 @@ reciept_files/
 *.pdf
 
 # PDFtoPrinter配下のすべてを除外（リポジトリには含めない）
-application/pdftoprinter/*
+application/pdftoprinter/
 
 # その他OSごとの無視ファイル
 .DS_Store
