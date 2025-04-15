@@ -1,0 +1,205 @@
+{% extends 'page_template.html' %}
+
+{% block style %}
+<style>
+    form{
+        background: rgb(222, 237, 242);
+        padding: 2rem;
+        border-radius: 1rem;
+        
+    }
+
+    form > div.inputItem{
+        margin-bottom: 0.5rem;
+    }
+
+    p.attention::before{
+        content: "※";
+    }
+    p.attention{
+        display: inline;
+        margin: 0 0 0 5px;
+        color: gray;
+    }
+
+    button{
+        font-size: 1.2rem;
+    }
+
+    dialog{
+        background: rgba(0, 0, 0, 0.323);
+        border: none;
+        max-width: none;
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        z-index: 999;
+    }
+
+    div.dialogContainer{
+        padding: 2rem;
+        border-radius: 1rem;
+        width: 24rem;
+        background: white;
+        margin: auto;
+        top: 50%;
+        left: 50%;
+        position: absolute;
+        transform: translate(-50%, -50%);
+
+        p{
+            display: inline;
+        }
+
+        p#printStatus{
+            color: brown;
+        }
+        img{
+            width: 1rem;
+            vertical-align: bottom;
+            margin: 0 0 0.5rem 0.5rem;
+        }
+        a{
+            background: var(--accent);
+            padding: 0.7rem 0.9rem;
+            color: white;
+            border-radius: 5px;
+            margin: 0.5rem auto;
+            display: none;
+            width: fit-content;
+        }
+    }
+</style>
+{% endblock  %}
+
+{% block title %}
+領収書印刷
+{% endblock  %}
+
+{% block content %}
+<script>
+    window.addEventListener("load", function(){
+        let todayStr =  new Date().toLocaleDateString("ja-JP",{year: 'numeric',month: '2-digit',day: '2-digit',}).replaceAll('/','-');
+        console.log(todayStr);
+        document.getElementById("date").value = todayStr;
+    });
+    
+    function calcTax(element){
+        let price = element.value;
+        console.log(element.value)
+        document.getElementById("tax").innerText = Math.floor(price/11).toLocaleString("ja-JP");
+    }
+
+    async function doPrint(buttonElement){
+        // フォームの取得
+        let form = document.getElementById("printform");
+        
+        // 入力チェック
+        if(!form.price.validity.valid){
+            alert("0円以上の金額を入力して下さい");
+            return;
+        }
+        if(form.name.value.length == 0){
+            let nameLessCheck = confirm("宛名なしで印刷しますか？")
+            if(!nameLessCheck){
+                return;
+            }
+        }
+
+        // ボタンを利用不可にし、dialogを表示
+        buttonElement.disabled = true;
+        document.getElementById("printDialog").show();
+        
+        // データをもとにPDFを作成
+        // loadingのイメージを表示
+        document.getElementById("statusImg-create").src = "static/images/loading.gif";
+        // FormDataとして送信（そうしないとpostでチェックできなかった）
+        let formdata = new FormData(form);
+        let filename = "";
+        let option = {
+            method : "POST",
+            body: formdata
+        }
+        // Fetchでデータ送信およびファイル作成
+        const create_res = await fetch("/create_reciept", option)
+        .then( response =>{
+            if(!response.ok){
+                throw new Error("reciept create Error")
+            }
+            return response.json();
+        });
+        if(create_res.status == "success"){
+            filename = create_res.filename;
+            console.log(filename);
+        }
+        // ファイル作成の結果
+        console.log("create",create_res)
+
+        document.getElementById("statusImg-create").src = "static/images/done.png"; // ロード画像の切り替え
+        document.getElementById("statusImg-print").src = "static/images/loading.gif"; // ロード画像の切り替え
+        
+        formdata = new FormData()
+        formdata.append("filename", filename)
+        // 取得したファイル名を元に印刷の実行
+        option = {
+            method : "POST",
+            body : formdata
+        }
+        
+        const print_rtn = await fetch("/print_reciept",option)
+        .then(response =>{
+            return response.json()
+        })
+        console.log("print",print_rtn);
+        if(!print_rtn.success){
+            document.getElementById("statusImg-print").src = "static/images/failured.png";
+            document.getElementById("printStatus").style.display = "inline";
+            document.getElementById("nextButton").style.display = "block";
+        }else{
+            document.getElementById("statusImg-print").src = "static/images/done.png";
+            document.getElementById("nextButton").style.display = "block";
+        }
+        
+    }
+
+</script>
+
+<dialog id="printDialog">
+    <div class="dialogContainer">
+        <h3 style="margin-top: 0;">印刷実行中</h3>
+        <p class="statusText">領収書ファイル生成</p><img id="statusImg-create" src=""><br>
+        <p class="statusText">印刷</p><img id="statusImg-print" src=""><br>
+        <p id="printStatus" style="display: none;">印刷に失敗しました。プリンタを確認して、もう一度印刷を行ってください。<br></p><br>
+        <a id="nextButton" href="/">次の印刷へ</a>
+    </div>
+</dialog>
+
+<h3>領収書印刷</h3>
+<a href="/reprint" hidden>再印刷</a>
+<!-- <span class="material-symbols-outlined">bike_scooter</span> -->
+<div>
+    <form id="printform">
+        <div class="inputItem">
+            <label for="name">宛名</label><p class="attention">最大20文字</p><br>
+            <input id="name" name="name" type="text" maxlength="20">
+        </div>
+        <div class="inputItem">
+            <label for="price">金額</label><p class="attention">最大11文字</p><br>
+            <input id="price" name="price" type="number" onkeyup="calcTax(this)" required min="1">
+            <br>うち消費税等 <span id="tax"></span> 円
+        </div>
+        <div class="inputItem">
+            <label for="date">日付</label><br>
+            <input id="date" name="date" type="date" maxlength="11">
+        </div>
+        <div class="inputItem">
+            <label for="description">但し書き</label><br>
+            ただし、<input id="description" name="description" type="text" value="御飲食代">として
+        </div>
+        <center>
+            <button type="button" style="width: 12rem;" onclick="doPrint(this)">印刷</button>
+        </center>
+        
+    </form>
+</div>
+{% endblock  %}
